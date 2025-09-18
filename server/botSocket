@@ -1,0 +1,55 @@
+require('dotenv').config();
+const express = require("express");
+const app = express();
+const http = require("http");
+const server = http.createServer(app);
+const cors = require("cors");
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+console.log("API Key loaded:", process.env.OPENAI_API_KEY ? "✓" : "✗");
+
+console.log("API Key exists:", !!OPENAI_API_KEY);
+console.log("API Key starts with sk-:", OPENAI_API_KEY?.startsWith('sk-'));
+console.log("API Key length:", OPENAI_API_KEY?.length);
+console.log("First 10 chars:", OPENAI_API_KEY?.substring(0, 10));
+console.log("Last 4 chars:", OPENAI_API_KEY?.slice(-4));
+
+app.use(cors());
+
+const socket = require("socket.io");
+const { Configuration, OpenAIApi } = require("openai");
+
+server.listen(5000, () => {
+  console.log(":: server listening on 5000 :::");
+});
+
+const configuration = new Configuration({
+apiKey: OPENAI_API_KEY,});
+const openai = new OpenAIApi(configuration);
+
+const io = new socket.Server(server, {
+  path: "/api/socket.io",
+  cookie: false,
+  cors: { credentials: true, origin: true },
+});
+
+const chatHistory = [];
+io.on("connection", (socket) => {
+  socket.on("sendMessage", async (data) => {
+    console.log("===>> message from client:;", data.message);
+
+    chatHistory.push({ role: "user", content: data.message });
+    const chatCompletion = await openai.createChatCompletion({
+      model: "gpt-3.5-turbo",
+      messages: chatHistory,
+    });
+
+    socket.emit("receiveMessage", {
+      message: `${chatCompletion.data.choices[0].message.content}`,
+    });
+    chatHistory.push(chatCompletion.data.choices[0].message);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("===>>disconnect:;");
+  });
+});
